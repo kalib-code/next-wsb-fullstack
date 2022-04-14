@@ -16,6 +16,11 @@ export default function Home() {
     })
     console.log(response)
   }
+
+  const logout = async () => {
+    const response = await instance.post("/api/auth/logout")
+    console.log(response)
+  }
  return (
    <>
    <Head>
@@ -30,7 +35,9 @@ export default function Home() {
       >
         Login
       </button>
-      <button>
+      <button
+      onClick={() => logout()}
+      >
       Sign Out
       </button>
     </nav>
