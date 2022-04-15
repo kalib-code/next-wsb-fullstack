@@ -1,34 +1,53 @@
-import passport from 'passport'
-import nextConnect from 'next-connect'
-import { localStrategy } from '../../../lib/password-local'
-import { setLoginSession } from '../../../lib/auth'
+import jwt from "jsonwebtoken";
+import { compare } from "bcrypt";
+import prisma from "../../../lib/prisma";
+import {setTokenCookie} from "../../../lib/auth-cookies";
 
-const authenticate = (method, req, res) =>
-  new Promise((resolve, reject) => {
-    passport.authenticate(method, { session: false }, (error, token) => {
-      if (error) {
-        reject(error)
-      } else {
-        resolve(token)
-      }
-    })(req, res)
-  })
+export default async function login(req, res) {
+  if (!req.body) {
+    res.statusCode = 404;
+    res.end("Error");
+    return;
+  }
 
-passport.use(localStrategy)
+  const { username, password  } = req.body;
 
-export default nextConnect()
-  .use(passport.initialize())
-  .post(async (req, res) => {
-    try {
-      const user = await authenticate('local', req, res)
-      // session is the payload to save in the token, it may contain basic info about the user
-      const session = { ...user }
 
-      await setLoginSession(res, session)
+  const user = await prisma.user.findUnique({
+    where: {
+      email: username,
+    },
+  });
 
-      res.status(200).send({ done: true })
-    } catch (error) {
-      console.error(error)
-      res.status(401).send(error.message)
+  const { password : hashPassword ,  id, email,role , createAt} = user;
+
+  compare(password, JSON.parse(hashPassword), (err, result) => {
+    if (err) {
+      res.statusCode = 500;
+      res.end("Error");
+      return;
     }
-  })
+
+    const accessToken = jwt.sign(
+      {
+        id,
+        email,
+        role,
+        createAt,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: 60 * 60 * 8  },
+    )
+
+    setTokenCookie(res, accessToken);
+
+    if (result) {
+      res.json({
+        accessToken,
+      });
+    } else {
+      res.statusCode = 401;
+      res.end("Error");
+    }
+  });
+}
